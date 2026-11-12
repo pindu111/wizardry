@@ -49,6 +49,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .lbrow .sc{font-family:var(--num);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums}
 .lb-empty{color:var(--dim);font-size:14px;padding:6px 2px}
 .rankline{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(245,189,47,.1);border:1px solid rgba(245,189,47,.3);font-size:14px;color:#e8e2cf}
+.nameform label{display:block;font-weight:600;margin-bottom:8px;color:var(--chalk)}
+.nameform input{flex:1;min-width:0;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(3,6,12,.65);color:var(--chalk);font:500 16px var(--body);padding:0 10px}
+.nameform .rep-msg{display:block;margin-top:6px;min-height:1em}
 .rankline b{font-family:var(--num);font-size:20px;color:var(--gold-2)}
 .board-mini{display:grid;gap:4px;margin-bottom:10px}
 .board-mini .lbrow{padding:6px 10px}.board-mini .sc{font-size:17px}.board-mini .rk{font-size:15px}
@@ -350,6 +353,8 @@ form.kick input:focus{border-color:var(--gold);box-shadow:0 0 0 4px rgba(245,189
 </style>
 </head>
 <body>
+<script src="supabase.js"></script>
+<script>window.WIZ_SUPA={url:'https://hqzhusfgitxxmdkldzyp.supabase.co',key:'sb_publishable_qVzI4jcChA6IjJSvxBLJAw_iRBJZoqG'};</script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
     <linearGradient id="emHat" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7a4a22"/><stop offset=".55" stop-color="#4a2a12"/><stop offset="1" stop-color="#25140a"/></linearGradient>
@@ -1468,7 +1473,7 @@ function finishMatch(){$('#break').hidden=true;const sh=G.shots;const res={key:G
   if(o.m>0){c.w++;c.streak++;}else if(o.m<0){c.l++;c.streak=0;}else{c.d++;c.streak=0;}
   c.bestStreak=Math.max(c.bestStreak,c.streak);const pts=G.pts,pb=c.best>0&&pts>c.best;c.best=Math.max(c.best,pts);store.set('wiz-career',c);
   const passed=MILESTONES.filter(m=>m[0]>prevGoals&&m[0]<=c.goals).map(m=>m[1]);
-  G.phase='done';showFinal(res,{prevGoals,passed,pb,unlocked,dn,bonus,earned});postScore(res,c).then(()=>showRank(res));}
+  G.phase='done';showFinal(res,{prevGoals,passed,pb,unlocked,dn,bonus,earned});postScore(res,c).then(()=>{if(!SB)showRank(res);});}
 function cellMark(t,p){const v=p!=null?'+'+p:t==='wizard'||t==='goal'?'6':(t==='behind'||t==='post'||t==='rushed')?'1':'0';return t==='wizard'?['w','✦ '+v]:t==='goal'?['g',v]:(t==='behind'||t==='post'||t==='rushed')?['b',v]:['m',p!=null?'0':v];}
 function renderCareer(prevGoals,passed,pb){const c=getCareer();if(!c.matches){$('#fCareer').hidden=true;return;}$('#fCareer').hidden=false;
   const nm=nextMilestone(c.goals),pm=nextMilestone(prevGoals==null?c.goals:prevGoals);
@@ -1479,7 +1484,7 @@ function renderCareer(prevGoals,passed,pb){const c=getCareer();if(!c.matches){$(
     <div class="chase-bar"><i class="prev" style="width:${prevW}%"></i><i class="now" style="width:${prevW}%"></i></div></div>
     ${passed&&passed.length||pb?`<div class="passed">${pb?'<span>New personal best</span>':''}${(passed||[]).map(p=>`<span>✦ ${esc(p)}</span>`).join('')}</div>`:''}`;
   requestAnimationFrame(()=>requestAnimationFrame(()=>{const n=document.querySelector('#fCareer .now');if(n)n.style.width=pct(c.goals)+'%';}));}
-function showFinal(r,extra){$('#fRank').hidden=true;LAST_RES=r;$('#fImg').hidden=!r.cells;const pts=myPts(r),o=outcomeOf(r);$('#fKick').textContent=r.mode==='daily'?`Today's match · ${prettyDate(r.key)}`:'Practice match · full time';
+function showFinal(r,extra){$('#fRank').hidden=true;LAST_RES=r;if(SB)supaFinal(r);$('#fImg').hidden=!r.cells;const pts=myPts(r),o=outcomeOf(r);$('#fKick').textContent=r.mode==='daily'?`Today's match · ${prettyDate(r.key)}`:'Practice match · full time';
   $('#fScore').innerHTML=`${pts} <span style="font-size:.4em">pts</span>${o?`<div class="vs-line">vs ${esc(r.opp.name)} <b>${oppPts(r)}</b> · you kicked <b>${r.g}.${r.b}</b></div>`:''}`;
   const v=$('#fVerdict');v.textContent=o?o.word:'Full time';v.style.color=o&&o.cls==='loss'?'var(--red)':o&&o.cls==='draw'?'var(--chalk)':'var(--gold)';
   renderCareer(extra?extra.prevGoals:null,extra?extra.passed:null,extra?extra.pb:false);
@@ -1506,6 +1511,13 @@ $('#playDaily').onclick=()=>{const done=store.get('wiz-daily-'+melDate());if(don
 
 // ---------- answer reports ----------
 let DB=null,USER=null;
+// On the public website the build sets window.WIZ_SUPA and loads supabase-js; inside Claude the game uses Claude's own store instead.
+const SUPA=window.WIZ_SUPA||null;let SB=null;
+try{if(SUPA&&window.supabase){SB=window.supabase.createClient(SUPA.url,SUPA.key,{auth:{persistSession:false,autoRefreshToken:false}});setTimeout(()=>refreshBoardCard(),0);}}catch(e){SB=null;}
+function deviceId(){let d=store.get('wiz-device');if(!d){d=(crypto.randomUUID?crypto.randomUUID():'d-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2));store.set('wiz-device',d);}return d;}
+const cleanName=v=>{const n=String(v||'').replace(/\s+/g,' ').trim();return /^[A-Za-z0-9 _.'-]{2,16}$/.test(n)?n:null;};
+const RUDE=['fuck','shit','cunt','bitch','dick','cock','pussy','slut','whore','nigg','fag','rape','nazi','hitler','porn','penis','vagina','wank','twat','arse','retard'];
+const rude=n=>{const k=n.toLowerCase().replace(/0/g,'o').replace(/1/g,'i').replace(/3/g,'e').replace(/4/g,'a').replace(/5/g,'s').replace(/[^a-z]/g,'');return RUDE.some(w=>k.includes(w));};
 (async()=>{try{if(!window.claude||!window.claude.use)return;const [d,u]=await Promise.all([claude.use('db'),claude.use('user')]);DB=d;USER=u;
   if(USER&&await USER.isOwner())$('#openReports').hidden=false;refreshBoardCard();}catch(e){}})();
 const reportedKey=(c,a)=>c+'|'+norm(a);
@@ -1521,12 +1533,14 @@ function wireReport(){const box=$('#rep');if(!box)return;const btn=$('#repOpen')
 async function sendReport(cat,answer,note){const b=$('#repSend');b.disabled=true;$('#repMsg').textContent='Sending…';
   const item={cat:cat.id,title:cat.title,answer:answer.slice(0,120),note:note.slice(0,300),at:Date.now()};
   const markDone=()=>{const r=store.get('wiz-reported')||[];r.push(reportedKey(cat.id,answer));store.set('wiz-reported',r);};
-  try{if(!DB||!USER)throw new Error('no-db');const uid=await USER.id();if(!uid)throw new Error('no-id');
+  try{if(SB){const {error}=await SB.from('reports').insert({cat_id:cat.id,cat_title:cat.title,answer:item.answer,note:item.note,device_id:deviceId()});if(error&&error.code!=='23505')throw new Error('send-failed');
+      markDone();$('#rep').innerHTML='<div class="rep-msg ok">Sent. Thanks, we\'ll check it.</div>';return;}
+    if(!DB||!USER)throw new Error('no-db');const uid=await USER.id();if(!uid)throw new Error('no-id');
     const ref=DB.collection('reports').doc(uid);const snap=await ref.get();const items=(snap.exists&&Array.isArray(snap.data().items))?[...snap.data().items]:[];
     items.push(item);await ref.set({items:items.slice(-100)});markDone();
     $('#rep').innerHTML='<div class="rep-msg ok">Sent. The game\'s maker will review it.</div>';}
   catch(e){const txt=`Wizardry report\nCategory: ${cat.title}\nAnswer: ${answer}${note?`\nNote: ${note}`:''}`;markDone();
-    $('#rep').innerHTML=`<div class="rep-msg">This device can't send reports directly. Copy this and send it to whoever shared the game with you:</div><pre id="repTxt">${esc(txt)}</pre><div class="rep-row"><button class="btn ghost" id="repCopy" type="button">Copy</button></div>`;
+    $('#rep').innerHTML=`<div class="rep-msg">Couldn't send the report from here. Copy this and send it to whoever shared the game with you:</div><pre id="repTxt">${esc(txt)}</pre><div class="rep-row"><button class="btn ghost" id="repCopy" type="button">Copy</button></div>`;
     $('#repCopy').onclick=()=>{try{navigator.clipboard.writeText(txt).then(()=>$('#repCopy').textContent='Copied').catch(()=>{});}catch(_){}};}}
 let REPORTS=[];
 async function openReports(){$('#intro').hidden=true;$('#reports').hidden=false;$('#rSum').textContent='Loading reports…';$('#rList').innerHTML='';
@@ -1582,26 +1596,50 @@ $('#fImg').onclick=openShare;$('#shareClose').onclick=()=>{$('#shareOv').hidden=
 // ---------- leaderboard ----------
 // One document per player at scores/<their id>: recent daily scores plus career totals. Names are looked up live, never stored.
 let LB=null,LB_T='today',MY_ID=null;
-async function myId(){if(MY_ID)return MY_ID;try{MY_ID=USER?await USER.id():null;}catch(e){}return MY_ID;}
-async function postScore(res,c){try{if(!DB||!USER)return;const uid=await myId();if(!uid)return;
+async function myId(){if(MY_ID)return MY_ID;
+  if(SB){let pl=store.get('wiz-player');if(!pl){try{const {data,error}=await SB.rpc('my_player',{d:deviceId()});if(!error&&data){pl=data;store.set('wiz-player',pl);}}catch(e){}}MY_ID=pl||null;return MY_ID;}
+  try{MY_ID=USER?await USER.id():null;}catch(e){}return MY_ID;}
+// Website: one row per device per day. A repeat post for the same day is refused by the database, which counts as already posted.
+async function supaPost(r,name){try{const o=outcomeOf(r);const {error}=await SB.from('scores').insert({device_id:deviceId(),name,day:r.key,pts:myPts(r),goals:r.g,behinds:r.b,margin:o?o.m:0,result:o?o.cls:'draw'});
+  if(error&&error.code!=='23505')return false;store.set('wiz-posted-'+r.key,1);LB=null;return true;}catch(e){return false;}}
+async function supaFinal(r){const el=$('#fRank');if(!SB||r.mode!=='daily')return;
+  if(store.get('wiz-posted-'+r.key)){showRank(r);return;}
+  if(r.key!==melDate())return;
+  const saved=store.get('wiz-name');
+  const post=async(name,msg)=>{msg.textContent='Posting your score…';const ok=await supaPost(r,name);if(ok){el.textContent='Score posted to the leaderboard.';showRank(r);}else msg.textContent="Couldn't post your score. Check your connection and try again.";return ok;};
+  el.hidden=false;
+  el.innerHTML=`<form id="nameForm" class="nameform"><label for="lbName">${saved?'Post your score to today\'s leaderboard':'Add your name to today\'s leaderboard'}</label><div class="rep-row"><input id="lbName" maxlength="16" placeholder="Your name" autocomplete="nickname"><button class="btn" type="submit">Post score</button></div><span class="rep-msg" id="nameMsg"></span></form>`;
+  if(saved)$('#lbName').value=saved;
+  $('#nameForm').onsubmit=async e=>{e.preventDefault();const n=cleanName($('#lbName').value);const msg=$('#nameMsg');
+    if(!n){msg.textContent='Use 2 to 16 letters, numbers or spaces.';return;}if(rude(n)){msg.textContent='Pick a different name.';return;}
+    store.set('wiz-name',n);await post(n,msg);};
+  if(saved)post(saved,$('#nameMsg'));}
+async function postScore(res,c){try{if(SB||!DB||!USER)return;const uid=await myId();if(!uid)return;
   const ref=DB.collection('scores').doc(uid);const snap=await ref.get();const old=snap.exists?snap.data():{};const days={...(old.days||{})};
   if(res.mode==='daily'&&!days[res.key]){const o=outcomeOf(res);days[res.key]={pts:myPts(res),r:o?o.cls:'',m:o?o.m:0,wiz:res.wiz||0};}
   const keep={};Object.keys(days).sort().slice(-30).forEach(k=>keep[k]=days[k]);
   await ref.set({days:keep,lp:c.lp,goals:c.goals,matches:c.matches,w:c.w,l:c.l,best:c.best,at:Date.now()});LB=null;}catch(e){}}
-async function loadBoard(force){if(LB&&!force)return LB;if(!DB)return null;try{const q=await DB.collection('scores').get();const rows=q.docs.map(d=>({id:d.id,...(d.data()||{})}));
+async function loadBoard(force){if(LB&&!force)return LB;
+  if(SB){try{const key=melDate();const [a,b]=await Promise.all([SB.from('scores').select('player,name,pts,margin,result').eq('day',key).order('pts',{ascending:false}).limit(100),
+      SB.from('totals').select('player,name,pts,goals,matches,wins,losses,best').order('pts',{ascending:false}).limit(100)]);
+    if(a.error||b.error)return null;const m=new Map();
+    (b.data||[]).forEach(t=>m.set(t.player,{id:t.player,name:t.name,lp:t.pts,goals:t.goals,matches:t.matches,w:t.wins,l:t.losses,best:t.best,days:{}}));
+    (a.data||[]).forEach(x=>{if(!m.has(x.player))m.set(x.player,{id:x.player,name:x.name,lp:x.pts,goals:0,matches:1,w:0,l:0,best:x.pts,days:{}});const row=m.get(x.player);row.name=x.name;row.days[key]={pts:x.pts,r:x.result,m:x.margin};});
+    LB=[...m.values()];return LB;}catch(e){return null;}}
+  if(!DB)return null;try{const q=await DB.collection('scores').get();const rows=q.docs.map(d=>({id:d.id,...(d.data()||{})}));
   let names={};try{if(USER&&rows.length)names=await USER.profiles(rows.map(r=>r.id));}catch(e){}
   rows.forEach(r=>r.name=(names[r.id]&&names[r.id].name)||'Someone');LB=rows;return rows;}catch(e){return null;}}
 function boardRows(rows,t,key){if(t==='today')return rows.filter(r=>r.days&&r.days[key]).map(r=>({...r,score:r.days[key].pts,sub:r.days[key].r==='win'?`Won by ${r.days[key].m}`:r.days[key].r==='loss'?`Lost by ${-r.days[key].m}`:r.days[key].r==='draw'?'Draw':''})).sort((a,b)=>b.score-a.score);
-  if(t==='all')return rows.map(r=>({...r,score:r.lp||0,sub:`${r.matches||0} matches · ${r.w||0}–${r.l||0}`})).sort((a,b)=>b.score-a.score);
+  if(t==='all')return rows.map(r=>({...r,score:r.lp||0,sub:`${r.matches||0} match${r.matches===1?'':'es'} · ${r.w||0}–${r.l||0}`})).sort((a,b)=>b.score-a.score);
   return rows.map(r=>({...r,score:r.goals||0,sub:`Best match ${r.best||0} pts`})).sort((a,b)=>b.score-a.score);}
 function rowHtml(r,i,me){const el=document.createElement('div');el.className='lbrow'+(r.id===me?' me':'');
   el.innerHTML=`<span class="rk">${i+1}</span><span class="nm"></span><span class="sc">${r.score.toLocaleString()}</span>`;const nm=el.querySelector('.nm');nm.textContent=r.id===me?`${r.name} (you)`:r.name;
   if(r.sub){const sm=document.createElement('small');sm.textContent=r.sub;nm.append(sm);}return el;}
 async function renderBoard(){const list=$('#lbList');list.innerHTML='<div class="lb-empty">Loading…</div>';const rows=await loadBoard(true);const me=await myId();const key=melDate();
-  list.innerHTML='';if(!rows){list.innerHTML='<div class="lb-empty">The leaderboard isn\'t available here. Open the game while signed in to Claude.</div>';return;}
+  list.innerHTML='';if(!rows){list.innerHTML=`<div class="lb-empty">${SB?"Couldn't load the leaderboard. Check your connection and try again.":"The leaderboard isn't available here. Open the game while signed in to Claude."}</div>`;return;}
   const r=boardRows(rows,LB_T,key);if(!r.length)list.innerHTML=`<div class="lb-empty">${LB_T==='today'?'Nobody has played today\'s match yet. Be the first.':'No scores yet.'}</div>`;
   r.forEach((x,i)=>list.append(rowHtml(x,i,me)));
-  $('#lbNote').textContent=LB_T==='today'?`Today's match only (${prettyDate(key)}). Practice matches don't count.`:LB_T==='all'?'Lifetime points, including daily streak bonuses.':'Every goal kicked, daily and practice.';}
+  $('#lbNote').textContent=LB_T==='today'?`Today's match only (${prettyDate(key)}). Practice matches don't count.`:LB_T==='all'?(SB?'Total points from daily matches.':'Lifetime points, including daily streak bonuses.'):(SB?'Goals kicked in daily matches.':'Every goal kicked, daily and practice.');}
 function openBoard(){$('#intro').hidden=true;$('#board').hidden=false;renderBoard();}
 document.querySelectorAll('#board .tab').forEach(b=>b.onclick=()=>{LB_T=b.dataset.t;document.querySelectorAll('#board .tab').forEach(x=>x.classList.toggle('on',x===b));renderBoard();});
 $('#lbClose').onclick=()=>{$('#board').hidden=true;refreshIntro();$('#intro').hidden=false;};
