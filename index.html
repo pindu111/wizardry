@@ -1530,11 +1530,19 @@ function wireReport(){const box=$('#rep');if(!box)return;const btn=$('#repOpen')
       <textarea id="repNote" maxlength="300" placeholder="e.g. He played 100 games for Hawthorn"></textarea>
       <div class="rep-row"><button class="btn" id="repSend" type="button">Send report</button><span class="rep-msg" id="repMsg"></span></div>`;
     $('#repNote').focus();$('#repSend').onclick=()=>sendReport(cat,box.dataset.ans,$('#repNote').value.trim());};}
-async function sendReport(cat,answer,note){const b=$('#repSend');b.disabled=true;$('#repMsg').textContent='Sending…';
+// AI second opinion on a reported answer (website only, via /api/check-answer). Never changes the score.
+async function aiCheck(cat,answer,note){if(!SB)return null;const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),12000);
+  try{const r=await fetch('/api/check-answer',{method:'POST',headers:{'Content-Type':'application/json'},signal:ctl.signal,body:JSON.stringify({cat:cat.title,hint:cat.hint,answer,note})});
+    if(!r.ok)return null;const j=await r.json();return['yes','no','unsure'].includes(j.verdict)?j:null;}catch(e){return null;}finally{clearTimeout(t);}}
+const AI_LINE={yes:'AI check: looks like it should count.',no:'AI check: probably doesn\'t fit, but a human will still look.',unsure:'AI check: not sure, a human will decide.'};
+async function sendReport(cat,answer,note){const b=$('#repSend');b.disabled=true;$('#repMsg').textContent='Checking…';
+  const ai=await aiCheck(cat,answer,note);$('#repMsg').textContent='Sending…';
+  if(ai){const tag=`[AI ${ai.verdict}${ai.reason?': '+ai.reason:''}]`;note=(note?note+' ':'')+tag;}
+  const aiMsg=ai?`<div class="rep-msg">${esc(AI_LINE[ai.verdict])}${ai.reason?' '+esc(ai.reason):''}</div>`:'';
   const item={cat:cat.id,title:cat.title,answer:answer.slice(0,120),note:note.slice(0,300),at:Date.now()};
   const markDone=()=>{const r=store.get('wiz-reported')||[];r.push(reportedKey(cat.id,answer));store.set('wiz-reported',r);};
   try{if(SB){const {error}=await SB.from('reports').insert({cat_id:cat.id,cat_title:cat.title,answer:item.answer,note:item.note,device_id:deviceId()});if(error&&error.code!=='23505')throw new Error('send-failed');
-      markDone();$('#rep').innerHTML='<div class="rep-msg ok">Sent. Thanks, we\'ll check it.</div>';return;}
+      markDone();$('#rep').innerHTML='<div class="rep-msg ok">Sent. Thanks, we\'ll check it.</div>'+aiMsg;return;}
     if(!DB||!USER)throw new Error('no-db');const uid=await USER.id();if(!uid)throw new Error('no-id');
     const ref=DB.collection('reports').doc(uid);const snap=await ref.get();const items=(snap.exists&&Array.isArray(snap.data().items))?[...snap.data().items]:[];
     items.push(item);await ref.set({items:items.slice(-100)});markDone();
